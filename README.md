@@ -1,0 +1,1 @@
+# asosyalsozluk-app-v2
