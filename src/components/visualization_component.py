@@ -8,6 +8,7 @@ import nltk
 from nltk.corpus import stopwords
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Download NLTK data
 nltk.download('stopwords', quiet=True)
@@ -67,8 +68,11 @@ def top_authors_chart(dask_df: dd.DataFrame) -> go.Figure:
     return fig
 
 def entry_score_vs_length_chart(dask_df: dd.DataFrame) -> go.Figure:
-    sample = dask_df.sample(frac=0.1).compute()  # Sample 10% of data for performance
-    fig = px.scatter(sample, x='entry_length', y='score', hover_data=['author', 'title'],
+    # Ensure to sample the DataFrame after selecting necessary columns
+    sample = dask_df[['entiri', 'skor', 'author', 'baslik']].sample(frac=0.1).compute()  # Sample 10% of data for performance
+    sample['entry_length'] = sample['entiri'].str.len()
+
+    fig = px.scatter(sample, x='entry_length', y='skor', hover_data=['author', 'baslik'],
                      title='Entry Score vs Length')
     fig.update_layout(width=600, height=400)
     return fig

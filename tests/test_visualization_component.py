@@ -13,8 +13,7 @@ class TestVisualizationComponent(unittest.TestCase):
             'entiri': ['test word test', 'another word', 'test'],
             'tarih': ['2023-01-01', '2023-02-01', '2023-03-01'],
             'author': ['author1', 'author2', 'author1'],
-            'score': [1, 2, 3],
-            'entry_length': [10, 20, 30],
+            'skor': [1, 2, 3],
             'baslik': ['title1', 'title2', 'title3']
         }
         cls.test_df = dd.from_pandas(pd.DataFrame(data), npartitions=1)
