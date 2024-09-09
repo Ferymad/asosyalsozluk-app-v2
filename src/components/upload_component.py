@@ -4,35 +4,19 @@ from services.csv_to_json import csv_to_json
 from utils.file_handling import save_uploaded_file
 from utils.data_validation import validate_csv_structure
 
-def upload_csv():
-    st.header("Upload your asosyalsozluk.com CSV file")
-    
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    
+def upload_csv(uploaded_file):
     if uploaded_file is not None:
         try:
-            # Save the uploaded file temporarily
-            temp_file_path = save_uploaded_file(uploaded_file)
-            
-            # Validate the CSV structure
-            if not validate_csv_structure(temp_file_path):
-                st.error("The uploaded file does not have the expected structure. Please ensure it's a valid asosyalsozluk.com export.")
-                return None
-            
             # Read the CSV file
-            df = pd.read_csv(temp_file_path)
+            df = pd.read_csv(uploaded_file)
             
-            # Convert CSV to JSON
-            json_data = csv_to_json(df)
+            # You can add any additional processing here
             
-            st.success("File successfully uploaded and converted!")
-            
-            return json_data
-        
+            st.success("File successfully uploaded and processed!")
+            return df
         except Exception as e:
             st.error(f"An error occurred while processing the file: {str(e)}")
             return None
-    
     return None
 
 def display_upload_status(json_data):

@@ -1,72 +1,20 @@
 import streamlit as st
-import json
-from typing import List, Dict, Any
-from dateutil import parser
+import dask.dataframe as dd
+from typing import Dict, Any
 from datetime import datetime, timezone
-from components.display_component import display_entries
-from datetime import timedelta
 import math
+import pandas as pd
 
-def parse_date(date_string: str) -> datetime:
-    """Parse an ISO 8601 date string into a datetime object."""
-    return parser.isoparse(date_string)
-
-def search_entries(entries, query):
-    query = query.lower()
-    
-    def safe_lower(value):
-        """Safely convert a value to lowercase string."""
-        if value is None:
-            return ""
-        return str(value).lower()
-
-    seen_entries = set()
-    filtered_entries = []
-    
-    for entry in entries:
-        if (query in safe_lower(entry.get('baslik', '')) or 
-            query in safe_lower(entry.get('entiri', ''))):
-            entry_id = entry.get('id', entry.get('tarih'))  # Use a unique identifier
-            if entry_id not in seen_entries:
-                seen_entries.add(entry_id)
-                filtered_entries.append(entry)
-    
-    return filtered_entries
-
-def filter_by_date(entries: List[Dict[str, Any]], start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
-    """Filter entries by date range."""
-    return [
-        entry for entry in entries
-        if start_date <= parse_date(entry['tarih']) <= end_date
-    ]
-
-def filter_by_score(entries: List[Dict[str, Any]], min_score: int, max_score: int) -> List[Dict[str, Any]]:
-    """Filter entries by score range."""
-    return [
-        entry for entry in entries
-        if min_score <= entry['skor'] <= max_score
-    ]
-
-def filter_deleted(entries: List[Dict[str, Any]], show_deleted: bool) -> List[Dict[str, Any]]:
-    """Filter entries based on deletion status."""
-    if show_deleted:
-        return entries
-    return [entry for entry in entries if not entry['silinmis']]
-
-def search_filter_sidebar(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Create a sidebar for search and filter options, setting default date range based on entries."""
-    if entries:
-        # Extract dates from entries and parse them
-        dates = [parser.isoparse(entry['tarih']) for entry in entries if 'tarih' in entry]
-        min_date = min(dates).date() if dates else datetime.now().date()
-        max_date = max(dates).date() if dates else datetime.now().date()
-    else:
-        # Default to last year if no entries are available
-        today = datetime.now().date()
-        min_date = today.replace(year=today.year - 1)
-        max_date = today
-
+def search_filter_sidebar(dask_df: dd.DataFrame) -> Dict[str, Any]:
     st.sidebar.header("Search and Filter")
+
+    # Compute min and max dates from the 'tarih' column
+    min_date = dask_df['tarih'].min().compute()
+    max_date = dask_df['tarih'].max().compute()
+
+    # Convert to datetime.date for the date_input widget
+    min_date = pd.to_datetime(min_date).date()
+    max_date = pd.to_datetime(max_date).date()
 
     search_term = st.sidebar.text_input("Search entries")
     date_range = st.sidebar.date_input("Date range", value=(min_date, max_date))
@@ -81,61 +29,76 @@ def search_filter_sidebar(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
         "entries_per_page": entries_per_page
     }
 
-def run_search_filter_component(entries):
-    st.subheader("Arama ve Filtreleme")
-    
-    filter_options = search_filter_sidebar(entries)
+def run_search_filter_component(dask_df: dd.DataFrame):
+    filter_options = search_filter_sidebar(dask_df)
     search_query = filter_options["search_term"]
-    entries_per_page = filter_options.get("entries_per_page", 10)
-    
-    if 'page' not in st.session_state:
-        st.session_state.page = 1
-    
-    st.write(f"Total entries before filtering: {len(entries)}")
-    
-    def filter_entry(entry):
-        entry_date = parse_date(entry['tarih'])
-        date_condition = filter_options["start_date"] <= entry_date <= filter_options["end_date"]
-        deleted_condition = filter_options["show_deleted"] or not entry['silinmis']
-        search_condition = (not search_query or 
-                            search_query.lower() in entry['baslik'].lower() or 
-                            search_query.lower() in entry['entiri'].lower())
-        return date_condition and deleted_condition and search_condition
-    
-    filtered_entries = list(filter(filter_entry, entries))
-    st.write(f"Entries after filtering: {len(filtered_entries)}")
-    
-    if not filtered_entries:
-        st.warning("No entries found matching the current filters.")
-        return
-    
-    # After filtering entries
-    total_pages = math.ceil(len(filtered_entries) / entries_per_page)
-    st.session_state.page = min(st.session_state.page, total_pages)
-    
-    start_idx = (st.session_state.page - 1) * entries_per_page
-    end_idx = start_idx + entries_per_page
-    page_entries = filtered_entries[start_idx:end_idx]
-    
-    # Display entries
-    display_entries(page_entries)
-    
+    entries_per_page = filter_options["entries_per_page"]
+
+    # Debugging: Print initial number of entries
+    initial_entries = len(dask_df)
+    st.write(f"Initial entries: {initial_entries}")
+
+    # Ensure 'tarih' column is datetime with timezone information
+    dask_df['tarih'] = dd.to_datetime(dask_df['tarih'], errors='coerce').dt.tz_localize(None).dt.tz_localize('UTC')
+
+    # Apply date filters
+    start_date = pd.Timestamp(filter_options["start_date"])
+    end_date = pd.Timestamp(filter_options["end_date"])
+    filtered_df = dask_df[
+        (dask_df['tarih'] >= start_date) &
+        (dask_df['tarih'] <= end_date)
+    ]
+
+    # Debugging: Print number of entries after date filtering
+    date_filtered_entries = len(filtered_df)
+    st.write(f"Entries after date filtering: {date_filtered_entries}")
+
+    # Apply deletion filter
+    if not filter_options["show_deleted"]:
+        filtered_df = filtered_df[~filtered_df['silinmis']]
+
+    # Debugging: Print number of entries after deletion filter
+    deletion_filtered_entries = len(filtered_df)
+    st.write(f"Entries after deletion filter: {deletion_filtered_entries}")
+
+    # Apply search query filter
+    if search_query:
+        filtered_df = filtered_df[
+            filtered_df['baslik'].astype(str).str.contains(search_query, case=False, na=False) |
+            filtered_df['entiri'].astype(str).str.contains(search_query, case=False, na=False)
+        ]
+
+    # Debugging: Print number of entries after search filter
+    search_filtered_entries = len(filtered_df)
+    st.write(f"Entries after search filtering: {search_filtered_entries}")
+
+    total_entries = len(filtered_df)
+    total_pages = math.ceil(total_entries / entries_per_page)
+    st.write(f"Total entries after filtering: {total_entries}")
+
     # Pagination controls
     col1, col2, col3 = st.columns([1,2,1])
     with col1:
-        if st.button("Previous") and st.session_state.page > 1:
-            st.session_state.page -= 1
+        if st.button("Previous") and st.session_state.current_page > 1:
+            st.session_state.current_page -= 1
     with col2:
-        st.write(f"Page {st.session_state.page} of {total_pages}")
+        st.write(f"Page {st.session_state.current_page} of {total_pages}")
     with col3:
-        if st.button("Next") and st.session_state.page < total_pages:
-            st.session_state.page += 1
+        if st.button("Next") and st.session_state.current_page < total_pages:
+            st.session_state.current_page += 1
 
-# Example usage
-if __name__ == "__main__":
-    # This is for testing purposes
-    with open("sample_data.json", "r", encoding="utf-8") as f:
-        sample_json_data = f.read()
-    filtered_entries = run_search_filter_component(sample_json_data)
-    st.write(f"Filtered entries: {len(filtered_entries)}")
-    st.json(filtered_entries[:5])  # Display first 5 filtered entries
+    # Load entries for the current page
+    start_idx = (st.session_state.current_page - 1) * entries_per_page
+    end_idx = start_idx + entries_per_page
+
+    # Compute the Dask DataFrame to a Pandas DataFrame for pagination
+    page_entries = filtered_df.compute().iloc[start_idx:end_idx]
+
+    # Display entries
+    for _, entry in page_entries.iterrows():
+        st.markdown(f"### {entry['baslik']}")
+        st.write(entry['entiri'])
+        st.write(f"Score: {entry['skor']} | Date: {entry['tarih']}")
+        if entry['silinmis']:
+            st.write("(Deleted)")
+        st.markdown("---")
