@@ -6,7 +6,7 @@ from components.search_filter_component import run_search_filter_component
 from components.visualization_component import run_visualization_component
 from services.csv_to_json import process_uploaded_file
 from utils.data_validation import validate_and_clean_data
-from components import display_developer_info
+from components import display_developer_info, display_footer
 
 # Initialize session state
 if 'dask_df' not in st.session_state:
@@ -49,6 +49,9 @@ def main() -> None:
             st.error("Failed to process the uploaded file.")
     else:
         st.warning("Please upload a CSV file to begin.")
+
+    # Display footer with developer information
+    display_footer()
 
 if __name__ == "__main__":
     main()
