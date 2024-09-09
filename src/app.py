@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from services.csv_to_json import process_uploaded_file
@@ -19,7 +20,7 @@ def process_data(file_path: str) -> List[Dict[str, Any]]:
     df: pd.DataFrame = pd.read_csv(file_path, encoding='utf-8')
     return df.to_dict('records')
 
-def save_uploaded_file(uploaded_file: st.UploadedFile) -> Optional[str]:
+def save_uploaded_file(uploaded_file: UploadedFile) -> Optional[str]:
     """Save the uploaded file to a temporary directory."""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
