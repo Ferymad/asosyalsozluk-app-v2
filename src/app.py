@@ -11,6 +11,8 @@ import pandas as pd
 from itertools import islice
 from datetime import datetime, timedelta
 import pytz
+import tempfile
+from importlib import import_module
 
 # Initialize session state
 if 'json_data' not in st.session_state:
@@ -24,14 +26,16 @@ def process_data(file_path):
 def save_uploaded_file(uploaded_file):
     """Save the uploaded file to a temporary directory."""
     try:
-        if not os.path.exists("temp"):
-            os.makedirs("temp")
-        with open(os.path.join("temp", uploaded_file.name), "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        return os.path.join("temp", uploaded_file.name)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            return tmp_file.name
     except Exception as e:
         st.error(f"Error saving file: {e}")
         return None
+
+def load_component(component_name):
+    module = import_module(f"components.{component_name}")
+    return getattr(module, f"run_{component_name}")
 
 # Main app logic
 def main():
@@ -47,11 +51,13 @@ def main():
             
             # Data Analysis and Visualization Section
             st.header("Veri Görselleştirme")
-            run_visualization_component(entries)
+            visualization_component = load_component("visualization_component")
+            visualization_component(entries)
             
             # Entries Display Section
             st.header("Girdiler")
-            run_search_filter_component(entries)
+            search_filter_component = load_component("search_filter_component")
+            search_filter_component(entries)
 
     else:
         st.warning("Please upload a CSV file to begin.")
