@@ -2,9 +2,12 @@ import streamlit as st
 import dask.dataframe as dd
 import plotly.graph_objs as go
 import plotly.express as px
+import plotly.figure_factory as ff
 from collections import Counter
 import nltk
 from nltk.corpus import stopwords
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 # Download NLTK data
 nltk.download('stopwords', quiet=True)
@@ -57,13 +60,42 @@ def cacheable_monthly_entry_trend_chart(dask_df: dd.DataFrame) -> go.Figure:
 def monthly_entry_trend_chart(dask_df: dd.DataFrame) -> go.Figure:
     return cacheable_monthly_entry_trend_chart(dask_df)
 
+def top_authors_chart(dask_df: dd.DataFrame) -> go.Figure:
+    author_counts = dask_df['author'].value_counts().nlargest(10).compute()
+    fig = px.bar(x=author_counts.index, y=author_counts.values, title='Top 10 Authors')
+    fig.update_layout(xaxis_title='Author', yaxis_title='Number of Entries', width=600, height=400)
+    return fig
+
+def entry_score_vs_length_chart(dask_df: dd.DataFrame) -> go.Figure:
+    sample = dask_df.sample(frac=0.1).compute()  # Sample 10% of data for performance
+    fig = px.scatter(sample, x='entry_length', y='score', hover_data=['author', 'title'],
+                     title='Entry Score vs Length')
+    fig.update_layout(width=600, height=400)
+    return fig
+
+def create_word_cloud(dask_df: dd.DataFrame) -> plt.Figure:
+    all_text = " ".join(dask_df['entiri'].compute())
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_text)
+    fig, ax = plt.subplots()
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis('off')
+    return fig
+
+def create_timeline(dask_df: dd.DataFrame) -> go.Figure:
+    df = dask_df.compute()
+    df['tarih'] = pd.to_datetime(df['tarih'])
+    fig = ff.create_gantt(df, x_start='tarih', x_end='tarih', y='baslik', 
+                          show_colorbar=True, group_tasks=True)
+    fig.update_layout(title='Entry Timeline', width=800, height=400)
+    return fig
+
 def run_visualization_component(dask_df: dd.DataFrame):
     st.subheader("Data Visualization")
     
     # Visualization options
     chart_type = st.selectbox(
         "Select Chart Type",
-        ["Monthly Entry Trend", "Word Frequency"]
+        ["Monthly Entry Trend", "Word Frequency", "Top Authors", "Entry Score vs Length", "Word Cloud", "Timeline"]
     )
 
     # Display the selected chart
@@ -73,3 +105,15 @@ def run_visualization_component(dask_df: dd.DataFrame):
     elif chart_type == "Word Frequency":
         with st.spinner("Loading chart..."):
             st.plotly_chart(word_frequency_chart(dask_df))
+    elif chart_type == "Top Authors":
+        with st.spinner("Loading chart..."):
+            st.plotly_chart(top_authors_chart(dask_df))
+    elif chart_type == "Entry Score vs Length":
+        with st.spinner("Loading chart..."):
+            st.plotly_chart(entry_score_vs_length_chart(dask_df))
+    elif chart_type == "Word Cloud":
+        with st.spinner("Generating word cloud..."):
+            st.pyplot(create_word_cloud(dask_df))
+    elif chart_type == "Timeline":
+        with st.spinner("Creating timeline..."):
+            st.plotly_chart(create_timeline(dask_df))
